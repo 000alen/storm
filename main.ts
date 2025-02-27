@@ -3,9 +3,15 @@ import "dotenv/config";
 import fs from "fs";
 import { storm } from "./src";
 import { log } from "./src/logging";
+import { openai } from "@ai-sdk/openai";
 
 async function main() {
-  const article = await storm("Real Analysis")
+  const model = openai("gpt-4o");
+
+  const article = await storm({
+    model,
+    topic: "Real Analysis",
+  })
     .catch((error) => {
       log("error", error);
       throw error;

@@ -1,14 +1,19 @@
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 import { log } from "@/logging";
-import { openai } from "@ai-sdk/openai";
 import { answerSchema, outlineSchema, perspectiveSchema, questionSchema, type ArticleSection, type Outline, type OutlineItem } from "@/types";
 
-const model = openai("gpt-4o");
+export interface StormOptions {
+  model: LanguageModel;
+  topic: string;
+}
 
 export async function generateArticleSection(
+  options: StormOptions,
   outlineItem: OutlineItem,
 ): Promise<ArticleSection> {
+  const { model } = options;
+
   const {
     object: articleSection
   } = await generateObject({
@@ -23,7 +28,7 @@ export async function generateArticleSection(
 
   let children: ArticleSection[] = [];
   if (outlineItem.children.length > 0) {
-    children = await Promise.all(outlineItem.children.map(generateArticleSection));
+    children = await Promise.all(outlineItem.children.map((_) => generateArticleSection(options, _)));
   }
 
   return {
@@ -33,9 +38,10 @@ export async function generateArticleSection(
 }
 
 export async function generateArticle(
+  options: StormOptions,
   outline: Outline,
 ) {
-  const articleSections = await Promise.all(outline.items.map(generateArticleSection));
+  const articleSections = await Promise.all(outline.items.map((_) => generateArticleSection(options, _)));
 
   return {
     title: outline.title,
@@ -44,7 +50,9 @@ export async function generateArticle(
   }
 }
 
-export async function storm(topic: string) {
+export async function storm(options: StormOptions) {
+  const { model, topic } = options;
+
   const { object: draftOutline } = await generateObject({
     model,
     schema: outlineSchema,
@@ -117,7 +125,7 @@ export async function storm(topic: string) {
       throw error;
     });
 
-  return await generateArticle(outline)
+  return await generateArticle(options, outline)
     .catch((error) => {
       log("Error generating article", { error });
       throw error;
