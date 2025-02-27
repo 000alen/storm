@@ -1,0 +1,33 @@
+{
+  "name": "@000alen/storm",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "tsc --watch",
+    "start": "tsx main.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "Alen Rubilar",
+  "license": "MIT",
+  "dependencies": {
+    "@000alen/toposort": "^2.0.4",
+    "@ai-sdk/openai": "^1.1.13",
+    "ai": "^4.1.45",
+    "debug": "^4.4.0",
+    "typescript": "^5.7.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.13.4",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.3"
+  }
+}
