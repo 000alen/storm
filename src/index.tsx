@@ -24,6 +24,7 @@ export interface StormOptions {
 export async function generateArticleSection(
   options: StormOptions,
   outlineItem: OutlineItem,
+  lastK: ArticleSection[]
 ): Promise<ArticleSection> {
   const { model, topic } = options;
 
@@ -38,7 +39,7 @@ export async function generateArticleSection(
       description: z.string(),
       content: z.string(),
     }),
-    prompt: articleSectionPromptTemplate.format({ topic, outlineItem: JSON.stringify(outlineItem) }),
+    prompt: articleSectionPromptTemplate.format({ topic, outlineItem: JSON.stringify(outlineItem), lastK: JSON.stringify(lastK) }),
   });
 
   log("Article section generated", { title: articleSection.title });
@@ -60,7 +61,15 @@ export async function generateArticle(
 ) {
   log("Starting article generation based on outline", { title: outline.title });
 
-  const articleSections = await Promise.all(outline.items.map((_) => generateArticleSection(options, _)));
+  const k = 1;
+
+  const articleSections: ArticleSection[] = [];
+  for (const item of outline.items) {
+    const lastK = articleSections.slice(-k);
+    const articleSection = await generateArticleSection(options, item, lastK);
+    articleSections.push(articleSection);
+  }
+
 
   log("Completed generating all article sections", { sectionCount: articleSections.length });
 
@@ -132,24 +141,6 @@ export async function storm(options: StormOptions) {
 
   const { stagehand, tools } = await createBrowserToolSet();
 
-  // const answers: Answer[][] = []
-  // for (const { questions: _questions } of questions) {
-  //   const {
-  //     experimental_output: { answers: _answers }
-  //   } = await generateText({
-  //     model,
-  //     tools,
-  //     experimental_output: Output.object({
-  //       schema: z.object({
-  //         answers: answerSchema.array(),
-  //       }),
-  //     }),
-  //     prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(_questions) }),
-  //     maxSteps: 10,
-  //   })
-  //   log("Answers generated for question set", { answerCount: _answers.length });
-  //   answers.push(_answers);
-  // }
   const answers: Answer[][] = await Promise.all(questions.map(async ({ questions }) => {
     const {
       experimental_output: { answers }

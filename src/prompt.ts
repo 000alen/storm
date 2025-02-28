@@ -111,7 +111,15 @@ Based on the topic: {topic}
 
 Generate a high-quality article section based on the following outline item:
 
+"""
 {outlineItem}
+"""
+
+The immediate previous sections are (not complete, just the immediate previous ones):
+
+"""
+{lastK}
+"""
 
 Write this section to be:
 1. Informative and substantive, with specific examples and evidence
@@ -127,4 +135,5 @@ Write approximately 300-500 words for this section, excluding any subsections.
 `, z.object({
   topic: z.string(),
   outlineItem: z.string(),
+  lastK: z.string(),
 }));
