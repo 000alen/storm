@@ -20,11 +20,13 @@
     "@000alen/toposort": "^2.0.4",
     "@ai-sdk/openai": "^1.1.13",
     "ai": "^4.1.45",
+    "common-tags": "^1.8.2",
     "debug": "^4.4.0",
     "typescript": "^5.7.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/common-tags": "^1.8.4",
     "@types/debug": "^4.1.12",
     "@types/node": "^22.13.4",
     "dotenv": "^16.4.7",

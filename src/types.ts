@@ -4,7 +4,7 @@ export type OutlineItem = {
   title: string;
   description: string;
   guidelines: string;
-  children: OutlineItem[];
+  // children: OutlineItem[];
 };
 
 export const outlineItemSchema: z.ZodType<OutlineItem> = z
@@ -12,7 +12,7 @@ export const outlineItemSchema: z.ZodType<OutlineItem> = z
     title: z.string().describe("The title of the article section"),
     description: z.string().describe("The description of the article section"),
     guidelines: z.string().describe("The guidelines of the article section"),
-    children: z.lazy(() => outlineItemSchema.array()).describe("The sub-sections of the article section"),
+    // children: z.lazy(() => outlineItemSchema.array()).describe("The sub-sections of the article section"),
   })
   .describe("The outline item of the article");
 

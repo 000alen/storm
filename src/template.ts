@@ -29,7 +29,7 @@ export class Template<T extends string> {
     this.schema.parse(params);
 
     return Object.entries(params).reduce<string>(
-      (result, [key, value]) => result.replace(`{${key}}`, String(value)),
+      (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
       this.template
     );
   }
