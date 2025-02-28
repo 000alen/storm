@@ -130,40 +130,29 @@ export async function storm(options: StormOptions) {
 
   log("All questions generated", { totalPerspectives: perspectives.length });
 
-  const answers: Answer[][] = []
-  for (const { questions: _questions } of questions) {
-    console.log("iterating");
+  const { stagehand, tools } = await createBrowserToolSet();
 
-    // await Promise
-    //   .all(questions.map(async ({ questions }) => {
-    //     log("Generating answers for question set", { questionCount: questions.length });
-    //     const { browser, tools } = await createBBToolSet();
-    //     const {
-    //       experimental_output: { answers }
-    //     } = await generateText({
-    //       model,
-    //       tools,
-    //       experimental_output: Output.object({
-    //         schema: z.object({
-    //           answers: answerSchema.array(),
-    //         }),
-    //       }),
-    //       prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
-    //       maxSteps: 10,
-    //     })
-    //     await browser.close();
-    //     log("Answers generated for question set", { answerCount: answers.length });
-    //     return answers;
-    //   }))
-    //   .catch((error) => {
-    //     log("Error generating answers", { error });
-    //     throw error;
-    //   });
-
-    const { stagehand, tools } = await createBrowserToolSet();
-
+  // const answers: Answer[][] = []
+  // for (const { questions: _questions } of questions) {
+  //   const {
+  //     experimental_output: { answers: _answers }
+  //   } = await generateText({
+  //     model,
+  //     tools,
+  //     experimental_output: Output.object({
+  //       schema: z.object({
+  //         answers: answerSchema.array(),
+  //       }),
+  //     }),
+  //     prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(_questions) }),
+  //     maxSteps: 10,
+  //   })
+  //   log("Answers generated for question set", { answerCount: _answers.length });
+  //   answers.push(_answers);
+  // }
+  const answers: Answer[][] = await Promise.all(questions.map(async ({ questions }) => {
     const {
-      experimental_output: { answers: _answers }
+      experimental_output: { answers }
     } = await generateText({
       model,
       tools,
@@ -172,16 +161,20 @@ export async function storm(options: StormOptions) {
           answers: answerSchema.array(),
         }),
       }),
-      prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(_questions) }),
+      prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
       maxSteps: 10,
     })
+      .catch((error) => {
+        log("Error generating answers", { error });
+        throw error;
+      });
 
-    await stagehand.close();
+    log("Answers generated for question set", { answerCount: answers.length });
 
-    log("Answers generated for question set", { answerCount: _answers.length });
+    return answers;
+  }));
 
-    answers.push(_answers);
-  }
+  await stagehand.close();
 
   log("All answers generated");
 
