@@ -11,6 +11,9 @@ import {
   articleSectionPromptTemplate
 } from "./prompt";
 
+export { getStream } from "@/components/article";
+export { default as Article } from "@/components/article";
+
 export interface StormOptions {
   model: LanguageModel;
   topic: string;

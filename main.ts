@@ -4,6 +4,7 @@ import fs from "fs";
 import { storm } from "./src";
 import { log } from "./src/logging";
 import { openai } from "@ai-sdk/openai";
+import { getStream } from "./src/components/article";
 
 async function main() {
   const model = openai("gpt-4o");
@@ -17,9 +18,9 @@ async function main() {
       throw error;
     });
 
-  console.log(article);
-
-  await fs.promises.writeFile("result.md", JSON.stringify(article, null, 2));
+  await fs.promises.writeFile("result.json", JSON.stringify(article, null, 2));
+  const stream = await getStream(article);
+  await fs.promises.writeFile("result.pdf", stream);
 }
 
 main()
