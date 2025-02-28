@@ -9,7 +9,7 @@ import { getStream } from "./src/components/article";
 async function main() {
   const model = openai("gpt-4o");
 
-  const article = await storm({
+  const result = await storm({
     model,
     topic: "Real Analysis",
   })
@@ -18,8 +18,8 @@ async function main() {
       throw error;
     });
 
-  await fs.promises.writeFile("result.json", JSON.stringify(article, null, 2));
-  const stream = await getStream(article);
+  await fs.promises.writeFile("result.json", JSON.stringify(result, null, 2));
+  const stream = await getStream(result.article);
   await fs.promises.writeFile("result.pdf", stream);
 }
 

@@ -10,7 +10,7 @@ import {
   finalOutlinePromptTemplate,
   articleSectionPromptTemplate
 } from "./prompt";
-import { createBBToolSet } from "./tools";
+import { createBrowserToolSet } from "./tools";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
@@ -160,7 +160,7 @@ export async function storm(options: StormOptions) {
     //     throw error;
     //   });
 
-    const { stagehand, tools } = await createBBToolSet();
+    const { stagehand, tools } = await createBrowserToolSet();
 
     const {
       experimental_output: { answers: _answers }
@@ -208,13 +208,20 @@ export async function storm(options: StormOptions) {
 
   log("Final outline generated", { title: outline.title, sectionCount: outline.items.length });
 
-  const result = await generateArticle(options, outline)
+  const article = await generateArticle(options, outline)
     .catch((error) => {
       log("Error generating article", { error });
       throw error;
     });
 
-  log("Article generation completed", { title: result.title });
+  log("Article generation completed", { title: article.title });
 
-  return result;
+  return {
+    article,
+    outline,
+    perspectives,
+    questions,
+    answers,
+    qAndA,
+  }
 }
