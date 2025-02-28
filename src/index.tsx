@@ -1,7 +1,7 @@
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject, generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { log } from "@/logging";
-import { answerSchema, outlineSchema, perspectiveSchema, questionSchema, type ArticleSection, type Outline, type OutlineItem } from "@/types";
+import { answerSchema, outlineSchema, perspectiveSchema, questionSchema, type Answer, type ArticleSection, type Outline, type OutlineItem } from "@/types";
 import {
   outlinePromptTemplate,
   perspectivesPromptTemplate,
@@ -10,6 +10,7 @@ import {
   finalOutlinePromptTemplate,
   articleSectionPromptTemplate
 } from "./prompt";
+import { createBBToolSet } from "./tools";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
@@ -17,6 +18,7 @@ export { default as Article } from "@/components/article";
 export interface StormOptions {
   model: LanguageModel;
   topic: string;
+  // tools?: ToolSet;
 }
 
 export async function generateArticleSection(
@@ -128,28 +130,58 @@ export async function storm(options: StormOptions) {
 
   log("All questions generated", { totalPerspectives: perspectives.length });
 
-  const answers = await Promise
-    .all(questions.map(async ({ questions }, index) => {
-      log("Generating answers for question set", { index, questionCount: questions.length });
+  const answers: Answer[][] = []
+  for (const { questions: _questions } of questions) {
+    console.log("iterating");
 
-      const {
-        object: { answers }
-      } = await generateObject({
-        model,
+    // await Promise
+    //   .all(questions.map(async ({ questions }) => {
+    //     log("Generating answers for question set", { questionCount: questions.length });
+    //     const { browser, tools } = await createBBToolSet();
+    //     const {
+    //       experimental_output: { answers }
+    //     } = await generateText({
+    //       model,
+    //       tools,
+    //       experimental_output: Output.object({
+    //         schema: z.object({
+    //           answers: answerSchema.array(),
+    //         }),
+    //       }),
+    //       prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
+    //       maxSteps: 10,
+    //     })
+    //     await browser.close();
+    //     log("Answers generated for question set", { answerCount: answers.length });
+    //     return answers;
+    //   }))
+    //   .catch((error) => {
+    //     log("Error generating answers", { error });
+    //     throw error;
+    //   });
+
+    const { stagehand, tools } = await createBBToolSet();
+
+    const {
+      experimental_output: { answers: _answers }
+    } = await generateText({
+      model,
+      tools,
+      experimental_output: Output.object({
         schema: z.object({
           answers: answerSchema.array(),
         }),
-        prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
-      });
+      }),
+      prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(_questions) }),
+      maxSteps: 10,
+    })
 
-      log("Answers generated for question set", { index, answerCount: answers.length });
+    await stagehand.close();
 
-      return answers;
-    }))
-    .catch((error) => {
-      log("Error generating answers", { error });
-      throw error;
-    });
+    log("Answers generated for question set", { answerCount: _answers.length });
+
+    answers.push(_answers);
+  }
 
   log("All answers generated");
 
