@@ -1,7 +1,7 @@
 import { generateObject, generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { log } from "@/logging";
-import { answerSchema, outlineSchema, perspectiveSchema, questionSchema, type Answer, type ArticleSection, type Outline, type OutlineItem } from "@/types";
+import { answerSchema, perspectiveSchema, questionSchema, type Answer, type ArticleSection, type Outline, type OutlineItem } from "@/types";
 import {
   outlinePromptTemplate,
   perspectivesPromptTemplate,
@@ -11,13 +11,21 @@ import {
   articleSectionPromptTemplate
 } from "./prompt";
 import { createBrowserToolSet } from "./tools";
+import { type EmbeddingModel } from "ai";
+import outlineSchema from "./outlineSchema.json";
+import { nativeGenerateObject } from "./utils";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
 
 export interface StormOptions {
   model: LanguageModel;
+  embeddingModel: EmbeddingModel<string>;
+
   topic: string;
+  outline?: Outline;
+
+  dedupeThreshold?: number;
   // tools?: ToolSet;
 }
 
@@ -30,24 +38,45 @@ export async function generateArticleSection(
 
   log("Generating article section", { title: outlineItem.title });
 
-  const {
-    object: articleSection
-  } = await generateObject({
+  let articleSection;
+
+  const { object: generatedSection } = await generateObject({
     model,
     schema: z.object({
       title: z.string(),
       description: z.string(),
       content: z.string(),
     }),
-    prompt: articleSectionPromptTemplate.format({ topic, outlineItem: JSON.stringify(outlineItem), lastK: JSON.stringify(lastK) }),
+    prompt: articleSectionPromptTemplate.format({
+      topic,
+      outlineItem: JSON.stringify(outlineItem),
+      lastK: JSON.stringify(lastK),
+    }),
   });
+
+  articleSection = generatedSection;
 
   log("Article section generated", { title: articleSection.title });
 
   let children: ArticleSection[] = [];
-  // if (outlineItem.children.length > 0) {
-  //   children = await Promise.all(outlineItem.children.map((_) => generateArticleSection(options, _)));
-  // }
+
+  if (outlineItem.subItems && outlineItem.subItems.length > 0) {
+    log("Processing subsections", { count: outlineItem.subItems.length, parentTitle: outlineItem.title });
+
+    children = await Promise.all(
+      outlineItem.subItems!.map(subItem =>
+        generateArticleSection(options, subItem, [
+          ...lastK,
+          { ...articleSection, children: [] }
+        ])
+      )
+    );
+
+    log("Completed generating subsections", {
+      count: children.length,
+      parentTitle: outlineItem.title
+    });
+  }
 
   return {
     ...articleSection,
@@ -66,12 +95,26 @@ export async function generateArticle(
   const articleSections: ArticleSection[] = [];
   for (const item of outline.items) {
     const lastK = articleSections.slice(-k);
+    log(`Generating main section and any subsections for "${item.title}"`);
     const articleSection = await generateArticleSection(options, item, lastK);
     articleSections.push(articleSection);
+
+    // Log information about the generated section and its subsections
+    const subsectionCount = articleSection.children.length;
+    log(`Completed section "${item.title}" with ${subsectionCount} subsections`);
   }
 
+  const totalSections = articleSections.length;
+  const totalSubsections = articleSections.reduce(
+    (count, section) => count + section.children.length,
+    0
+  );
 
-  log("Completed generating all article sections", { sectionCount: articleSections.length });
+  log("Completed generating all article sections", {
+    mainSectionCount: totalSections,
+    subsectionCount: totalSubsections,
+    totalSectionCount: totalSections + totalSubsections
+  });
 
   return {
     title: outline.title,
@@ -81,21 +124,28 @@ export async function generateArticle(
 }
 
 export async function storm(options: StormOptions) {
-  const { model, topic } = options;
+  let { model, topic, outline } = options;
 
   log("Starting storm process", { topic });
 
-  const { object: draftOutline } = await generateObject({
-    model,
-    schema: outlineSchema,
-    prompt: outlinePromptTemplate.format({ topic }),
-  })
-    .catch((error) => {
-      log("Error generating outline", { error });
-      throw error;
-    });
+  if (!outline) {
+    const { object: draftOutline } = await nativeGenerateObject<Outline>({
+      model,
+      schema: outlineSchema,
+      schemaName: "Outline",
+      prompt: outlinePromptTemplate.format({ topic })
+    })
+      .catch((error) => {
+        log("Error generating outline", { error });
+        throw error;
+      });
 
-  log("Draft outline generated", { title: draftOutline.title, sectionCount: draftOutline.items.length });
+    log("Draft outline generated", { title: draftOutline.title, sectionCount: draftOutline.items.length });
+
+    outline = draftOutline;
+  } else {
+    log("Outline provided", { title: outline.title, sectionCount: outline.items.length });
+  }
 
   const { object: { perspectives } } = await generateObject({
     model,
@@ -176,19 +226,22 @@ export async function storm(options: StormOptions) {
 
   log("Q&A pairs created", { totalPairs: qAndA.flat().length });
 
-  const { object: outline } = await generateObject({
+  const { object: refinedOutline } = await nativeGenerateObject<Outline>({
     model,
     schema: outlineSchema,
+    schemaName: "Outline",
     prompt: finalOutlinePromptTemplate.format({
       topic,
-      draftOutline: JSON.stringify(draftOutline),
+      draftOutline: JSON.stringify(outline),
       qAndA: JSON.stringify(qAndA)
-    }),
+    })
   })
     .catch((error) => {
       log("Error generating outline", { error });
       throw error;
     });
+
+  outline = refinedOutline;
 
   log("Final outline generated", { title: outline.title, sectionCount: outline.items.length });
 

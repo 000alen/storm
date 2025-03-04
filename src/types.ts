@@ -1,20 +1,21 @@
 import { z } from "zod";
 
-export type OutlineItem = {
-  title: string;
-  description: string;
-  guidelines: string;
-  // children: OutlineItem[];
-};
-
-export const outlineItemSchema: z.ZodType<OutlineItem> = z
+export const baseOutlineItemSchema = z
   .object({
     title: z.string().describe("The title of the article section"),
     description: z.string().describe("The description of the article section"),
     guidelines: z.string().describe("The guidelines of the article section"),
-    // children: z.lazy(() => outlineItemSchema.array()).describe("The sub-sections of the article section"),
   })
   .describe("The outline item of the article");
+
+export type OutlineItem = z.infer<typeof baseOutlineItemSchema> & {
+  subItems: OutlineItem[];
+}
+
+export const outlineItemSchema: z.ZodType<OutlineItem> = baseOutlineItemSchema
+  .extend({
+    subItems: z.lazy(() => outlineItemSchema.array().describe("The sub-sections of the article section")),
+  });
 
 export const outlineSchema = z
   .object({

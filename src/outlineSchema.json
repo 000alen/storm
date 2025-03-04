@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Outline",
+  "description": "The outline of the article",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The title of the article"
+    },
+    "description": {
+      "type": "string",
+      "description": "The description of the article"
+    },
+    "items": {
+      "type": "array",
+      "description": "The outline of the article",
+      "items": {
+        "$ref": "#/definitions/OutlineItem"
+      }
+    }
+  },
+  "required": ["title", "description", "items"],
+  "definitions": {
+    "OutlineItem": {
+      "type": "object",
+      "description": "The outline item of the article",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the article section"
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the article section"
+        },
+        "guidelines": {
+          "type": "string",
+          "description": "The guidelines of the article section"
+        },
+        "subItems": {
+          "type": "array",
+          "description": "The sub-sections of the article section",
+          "items": {
+            "$ref": "#/definitions/OutlineItem"
+          }
+        }
+      },
+      "required": ["title", "description", "guidelines", "subItems"]
+    }
+  }
+}

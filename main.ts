@@ -7,11 +7,14 @@ import { openai } from "@ai-sdk/openai";
 import { getStream } from "./src/components/article";
 
 async function main() {
-  const model = openai("gpt-4o");
+  const model = openai("gpt-4o-mini");
+
+  const embeddingModel = openai.embedding("text-embedding-3-small");
 
   const result = await storm({
     model,
-    topic: "Real Analysis",
+    embeddingModel,
+    topic: "(Very) Brief Introduction to Real Analysis",
   })
     .catch((error) => {
       log("error", error);

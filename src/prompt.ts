@@ -1,12 +1,42 @@
-import { createTemplate } from "./template";
+import { template } from "./template";
 import { z } from "zod";
-import { stripIndent } from "common-tags";
 
-// Define templates for prompts
-export const outlinePromptTemplate = createTemplate(stripIndent`
+const outlineSchema = z.object({
+  topic: z.string(),
+});
+
+const perspectivesSchema = z.object({
+  topic: z.string(),
+});
+
+const questionsSchema = z.object({
+  topic: z.string(),
+  perspective: z.string(),
+});
+
+const answersSchema = z.object({
+  topic: z.string(),
+  questions: z.string(),
+});
+
+const finalOutlineSchema = z.object({
+  topic: z.string(),
+  draftOutline: z.string(),
+  qAndA: z.string(),
+});
+
+const articleSectionSchema = z.object({
+  topic: z.string(),
+  outlineItem: z.string(),
+  lastK: z.string(),
+  similarContent: z.string().optional(),
+  regenerationGuidance: z.string().optional(),
+});
+
+export const outlinePromptTemplate = template(outlineSchema)`
 You are an expert content strategist tasked with creating a comprehensive outline for an article.
 
-TOPIC: {topic}
+TOPIC: ${params => params.topic}
 
 Create a well-structured outline with the following elements:
 1. A compelling title that accurately reflects the topic and will engage readers
@@ -18,14 +48,10 @@ Create a well-structured outline with the following elements:
 
 The outline should have a logical flow, starting with introductory concepts and progressing to more complex ones.
 Ensure the outline is comprehensive enough to create a complete article that provides real value to readers.
-`,
-  z.object({
-    topic: z.string(),
-  })
-);
+`;
 
-export const perspectivesPromptTemplate = createTemplate(stripIndent`
-Based on the article topic: {topic}
+export const perspectivesPromptTemplate = template(perspectivesSchema)`
+Based on the article topic: ${params => params.topic}
 
 Generate a list of diverse perspectives to enrich the article.
 
@@ -37,14 +63,12 @@ For each perspective, provide:
 Include 3-5 distinct perspectives that will add depth and breadth to the article.
 Focus on perspectives that might challenge the reader or offer unique insights.
 Avoid overly similar perspectives or those with limited relevance to the main topic.
-`, z.object({
-  topic: z.string(),
-}));
+`;
 
-export const questionsPromptTemplate = createTemplate(stripIndent`
-Based on the following perspective regarding {topic}:
+export const questionsPromptTemplate = template(questionsSchema)`
+Based on the following perspective regarding ${params => params.topic}:
 
-{perspective}
+${params => params.perspective}
 
 Generate 3-5 thought-provoking questions that will help explore this perspective deeply.
 
@@ -55,17 +79,14 @@ For each question:
 4. Avoid questions with simple yes/no answers
 
 The questions should help uncover insights that would meaningfully contribute to the article.
-`, z.object({
-  topic: z.string(),
-  perspective: z.string(),
-}));
+`;
 
-export const answersPromptTemplate = createTemplate(stripIndent`
-Based on the topic: {topic}
+export const answersPromptTemplate = template(answersSchema)`
+Based on the topic: ${params => params.topic}
 
 Provide insightful, well-researched answers to the following questions:
 
-{questions}
+${params => params.questions}
 
 For each answer:
 1. Provide substantive content (150-250 words per answer)
@@ -75,21 +96,18 @@ For each answer:
 
 Your answers should be authoritative, balanced, and directly usable in the article.
 Avoid vague generalizations or unsubstantiated claims.
-`, z.object({
-  topic: z.string(),
-  questions: z.string(),
-}));
+`;
 
-export const finalOutlinePromptTemplate = createTemplate(stripIndent`
-Based on the topic: {topic}
+export const finalOutlinePromptTemplate = template(finalOutlineSchema)`
+Based on the topic: ${params => params.topic}
 
 You are tasked with refining an article outline based on additional research and insights.
 
 INITIAL DRAFT OUTLINE:
-{draftOutline}
+${params => params.draftOutline}
 
 RESEARCH INSIGHTS (Q&A):
-{qAndA}
+${params => params.qAndA}
 
 Using the initial outline as a foundation and the Q&A insights as enrichment:
 1. Create a more refined and comprehensive outline
@@ -100,26 +118,33 @@ Using the initial outline as a foundation and the Q&A insights as enrichment:
 
 The refined outline should be more nuanced and comprehensive than the initial draft,
 while remaining cohesive and well-structured.
-`, z.object({
-  topic: z.string(),
-  draftOutline: z.string(),
-  qAndA: z.string(),
-}));
+`;
 
-export const articleSectionPromptTemplate = createTemplate(stripIndent`
-Based on the topic: {topic}
+export const articleSectionPromptTemplate = template(articleSectionSchema)`
+Based on the topic: ${params => params.topic}
 
 Generate a high-quality article section based on the following outline item:
 
 """
-{outlineItem}
+${params => params.outlineItem}
 """
 
 The immediate previous sections are (not complete, just the immediate previous ones):
 
 """
-{lastK}
+${params => params.lastK}
 """
+
+${params => params.similarContent ? `
+IMPORTANT: Previous generation attempt produced content too similar to existing sections.
+The following paragraphs were identified as semantically similar:
+
+"""
+${params.similarContent}
+"""
+
+${params.regenerationGuidance || 'Please generate more unique, in-depth content that avoids being too similar to these paragraphs.'}
+` : ''}
 
 Write this section to be:
 1. Informative and substantive, with specific examples and evidence
@@ -132,8 +157,4 @@ If this section has children/subsections, it should serve as an introduction to 
 Aim for a professional tone that matches the subject matter.
 
 Write approximately 300-500 words for this section, excluding any subsections.
-`, z.object({
-  topic: z.string(),
-  outlineItem: z.string(),
-  lastK: z.string(),
-}));
+`;

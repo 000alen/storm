@@ -15,6 +15,9 @@ interface Options {
 export async function shouldDedupe(options: Options) {
   let { model, existing, candidate, threshold = 0.9, existingEmbeddings, candidateEmbedding } = options;
 
+  // Skip deduplication if there are no existing paragraphs
+  if (existing.length === 0) return { similar: [], should: false };
+
   if (!existingEmbeddings) {
     existingEmbeddings = await embedMany({
       model,
