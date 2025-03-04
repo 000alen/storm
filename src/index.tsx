@@ -60,11 +60,11 @@ export async function generateArticleSection(
 
   let children: ArticleSection[] = [];
 
-  if (outlineItem.subItems && outlineItem.subItems.length > 0) {
-    log("Processing subsections", { count: outlineItem.subItems.length, parentTitle: outlineItem.title });
+  if (outlineItem.items && outlineItem.items.length > 0) {
+    log("Processing subsections", { count: outlineItem.items.length, parentTitle: outlineItem.title });
 
     children = await Promise.all(
-      outlineItem.subItems!.map(subItem =>
+      outlineItem.items!.map(subItem =>
         generateArticleSection(options, subItem, [
           ...lastK,
           { ...articleSection, children: [] }
@@ -128,8 +128,9 @@ export async function storm(options: StormOptions) {
 
   log("Starting storm process", { topic });
 
+  let draftOutline: Outline | null = null;
   if (!outline) {
-    const { object: draftOutline } = await nativeGenerateObject<Outline>({
+    ({ object: draftOutline } = await nativeGenerateObject<Outline>({
       model,
       schema: outlineSchema,
       schemaName: "Outline",
@@ -138,11 +139,9 @@ export async function storm(options: StormOptions) {
       .catch((error) => {
         log("Error generating outline", { error });
         throw error;
-      });
+      }));
 
     log("Draft outline generated", { title: draftOutline.title, sectionCount: draftOutline.items.length });
-
-    outline = draftOutline;
   } else {
     log("Outline provided", { title: outline.title, sectionCount: outline.items.length });
   }
@@ -226,24 +225,34 @@ export async function storm(options: StormOptions) {
 
   log("Q&A pairs created", { totalPairs: qAndA.flat().length });
 
-  const { object: refinedOutline } = await nativeGenerateObject<Outline>({
-    model,
-    schema: outlineSchema,
-    schemaName: "Outline",
-    prompt: finalOutlinePromptTemplate.format({
-      topic,
-      draftOutline: JSON.stringify(outline),
-      qAndA: JSON.stringify(qAndA)
+  if (!outline) {
+    if (!draftOutline) {
+      throw new Error("Outline generation failed");
+    }
+
+    const { object: refinedOutline } = await nativeGenerateObject<Outline>({
+      model,
+      schema: outlineSchema,
+      schemaName: "Outline",
+      prompt: finalOutlinePromptTemplate.format({
+        topic,
+        draftOutline: JSON.stringify(draftOutline),
+        qAndA: JSON.stringify(qAndA)
+      })
     })
-  })
-    .catch((error) => {
-      log("Error generating outline", { error });
-      throw error;
-    });
+      .catch((error) => {
+        log("Error generating outline", { error });
+        throw error;
+      });
 
-  outline = refinedOutline;
+    log("Final outline generated", { title: refinedOutline.title, sectionCount: refinedOutline.items.length });
 
-  log("Final outline generated", { title: outline.title, sectionCount: outline.items.length });
+    outline = refinedOutline;
+  }
+
+  if (!outline) {
+    throw new Error("Outline generation failed");
+  }
 
   const article = await generateArticle(options, outline)
     .catch((error) => {

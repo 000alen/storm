@@ -9,12 +9,12 @@ export const baseOutlineItemSchema = z
   .describe("The outline item of the article");
 
 export type OutlineItem = z.infer<typeof baseOutlineItemSchema> & {
-  subItems: OutlineItem[];
+  items: OutlineItem[];
 }
 
 export const outlineItemSchema: z.ZodType<OutlineItem> = baseOutlineItemSchema
   .extend({
-    subItems: z.lazy(() => outlineItemSchema.array().describe("The sub-sections of the article section")),
+    items: z.lazy(() => outlineItemSchema.array().describe("The sub-sections of the article section")),
   });
 
 export const outlineSchema = z
