@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+export const textContentSchema = z.string().describe("Represents a bloc of content (could be thought of as a paragraph)");
+
 export const baseOutlineItemSchema = z
   .object({
     title: z.string().describe("The title of the article section"),
     description: z.string().describe("The description of the article section"),
     guidelines: z.string().describe("The guidelines of the article section"),
+    tokenBudget: z.number().int().positive().describe("The maximum number of tokens allowed for this section"),
   })
   .describe("The outline item of the article");
 
@@ -58,16 +61,22 @@ export type Answer = z.infer<typeof answerSchema>;
 export type ArticleSection = {
   title: string;
   description: string;
-  content: string;
+  // content: string;
+  content: string[];
   children: ArticleSection[];
+  tokenBudget: number;
+  actualTokenCount: number;
 }
 
 export const articleSectionSchema: z.ZodType<ArticleSection> = z
   .object({
     title: z.string().describe("The title of the article section"),
     description: z.string().describe("The description of the article section"),
-    content: z.string().describe("The content of the article section"),
-    children: z.lazy(() => articleSectionSchema.array()).describe("The sub-sections of the article section"),
+    // content: z.string().describe("The content of the article section"),
+    content: textContentSchema.array().describe("The content of the article section"),
+    children: z.lazy(() => z.array(articleSectionSchema as z.ZodType<ArticleSection>)).describe("The sub-sections of the article section"),
+    tokenBudget: z.number().int().positive().describe("The maximum number of tokens allowed for this section"),
+    actualTokenCount: z.number().int().positive().describe("The actual token count of this section"),
   })
   .describe("An article section");
 

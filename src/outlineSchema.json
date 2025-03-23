@@ -38,6 +38,11 @@
           "type": "string",
           "description": "The guidelines of the article section"
         },
+        "tokenBudget": {
+          "type": "integer",
+          "description": "The maximum number of tokens allowed for this section",
+          "minimum": 1
+        },
         "subItems": {
           "type": "array",
           "description": "The sub-sections of the article section",

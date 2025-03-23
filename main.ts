@@ -15,6 +15,7 @@ async function main() {
     model,
     embeddingModel,
     topic: "(Very) Brief Introduction to Real Analysis",
+    useResearchTools: false,
   })
     .catch((error) => {
       log("error", error);

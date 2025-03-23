@@ -45,6 +45,14 @@ Create a well-structured outline with the following elements:
    - A clear heading
    - A brief description of what this section will cover
    - 1-3 subsections where appropriate
+   - A token budget for each section and subsection (number of tokens to allocate)
+
+For token budgets:
+- Assign a token budget to each section and subsection based on its importance and complexity
+- Main sections typically need 500-1000 tokens
+- Subsections typically need 200-500 tokens
+- The total article should aim for 2000-5000 tokens total
+- Distribute the token budget proportionally based on the importance of each section
 
 The outline should have a logical flow, starting with introductory concepts and progressing to more complex ones.
 Ensure the outline is comprehensive enough to create a complete article that provides real value to readers.
@@ -115,6 +123,13 @@ Using the initial outline as a foundation and the Q&A insights as enrichment:
 3. Restructure sections if needed to create better flow
 4. Add or modify sections to address important aspects revealed in the research
 5. Ensure the outline maintains focus on the core topic
+6. Preserve or adjust the token budgets for each section as needed
+
+For token budgets:
+- Maintain the existing token budgets from the draft outline if they seem appropriate
+- Adjust token budgets as needed based on your refinements (increase budgets for expanded sections, decrease for condensed ones)
+- Ensure the total budget still allows for a comprehensive article (typically 2000-5000 tokens total)
+- Allocate budgets proportionally based on section importance and complexity
 
 The refined outline should be more nuanced and comprehensive than the initial draft,
 while remaining cohesive and well-structured.
@@ -156,5 +171,11 @@ The content should be original, accurate, and valuable to readers.
 If this section has children/subsections, it should serve as an introduction to those topics.
 Aim for a professional tone that matches the subject matter.
 
-Write approximately 300-500 words for this section, excluding any subsections.
+${params => {
+  const outline = JSON.parse(params.outlineItem);
+  if (outline.tokenBudget) {
+    return `IMPORTANT: This section has a token budget of ${outline.tokenBudget} tokens. Please generate content that fits within this budget. A token is approximately 3/4 of a word.`;
+  }
+  return `Write approximately 300-500 words for this section, excluding any subsections.`;
+}}
 `;
