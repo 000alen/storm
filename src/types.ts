@@ -98,7 +98,12 @@ export interface StormOptions {
   topic: string;
   outline?: Outline;
 
+  k?: number;
   dedupeThreshold?: number;
+  maxAttempts?: number;
+  maxSteps?: number;
+  tokenTolerance?: number;
+
   // tools?: ToolSet;
 
   useResearchTools?: boolean;

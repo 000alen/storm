@@ -15,6 +15,7 @@ import outlineSchema from "@/outlineSchema.json";
 import { nativeGenerateObject } from "@/utils";
 import { ensureBudget } from "@/postprocessing/budget";
 import { ensureUnique } from "@/postprocessing/unique";
+import { DEFAULT_K, DEFAULT_MAX_STEPS, DEFAULT_TOKEN_BUDGET, DEFAULT_USE_RESEARCH_TOOLS } from "@/config";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
@@ -31,26 +32,22 @@ export async function generateArticleSection(
   generatedSections: string[] = [],
   generatedEmbeddings: any[] = []
 ): Promise<{ articleSection: ArticleSection, state: GenerationState }> {
-  const { model, topic } = options;
-  const k = 3; // Define k here for use in getting lastK
-
-  // Get lastK from state instead of it being passed in
-  const lastK = state.sections.slice(-k);
+  const k = options.k ?? DEFAULT_K;
 
   log("Generating article section", { title: outlineItem.title });
 
   // Generate the initial section content
   const { object: generatedSection } = await generateObject({
-    model,
+    model: options.model,
     schema: z.object({
       title: z.string(),
       description: z.string(),
       content: textContentSchema.array(),
     }),
     prompt: articleSectionPromptTemplate.format({
-      topic,
+      topic: options.topic,
       outlineItem: JSON.stringify(outlineItem),
-      lastK: JSON.stringify(lastK),
+      lastK: JSON.stringify(state.sections.slice(-k)),
     }),
   })
     .catch((error) => {
@@ -164,7 +161,7 @@ export async function generateArticle(
     title: outline.title,
     description: outline.description,
     guidelines: "",
-    tokenBudget: 0,
+    tokenBudget: DEFAULT_TOKEN_BUDGET,
     items: []
   };
 
@@ -216,7 +213,7 @@ export async function generateArticle(
 }
 
 export async function storm(options: StormOptions) {
-  let { model, topic, outline, useResearchTools = false } = options;
+  let { model, topic, outline, useResearchTools = DEFAULT_USE_RESEARCH_TOOLS } = options;
 
   log("Starting storm process", { topic });
 
@@ -305,7 +302,7 @@ export async function storm(options: StormOptions) {
         }),
       }),
       prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
-      maxSteps: 10,
+      maxSteps: options.maxSteps ?? DEFAULT_MAX_STEPS,
     })
       .catch((error) => {
         log("Error generating answers", { error });

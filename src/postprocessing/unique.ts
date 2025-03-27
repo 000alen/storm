@@ -7,7 +7,7 @@ import {
 } from "@/prompt";
 import { embed } from "ai";
 import { shouldDedupe } from "@/dedupe";
-
+import { DEFAULT_DEDUPE_THRESHOLD, DEFAULT_K, DEFAULT_MAX_ATTEMPTS } from "@/config";
 
 /**
  * Checks if content is unique and regenerates it if needed
@@ -22,7 +22,8 @@ export async function ensureUnique<TContent = string>({
   state: GenerationState<TContent>;
   content: TContent[];
 }): Promise<PostprocessResult<TContent>> {
-  const maxAttempts = 3;
+  const k = options.k ?? DEFAULT_K;
+  const maxAttempts = DEFAULT_MAX_ATTEMPTS;
 
   // Early return if no embedding model is available
   if (!options.embeddingModel) {
@@ -54,7 +55,7 @@ export async function ensureUnique<TContent = string>({
       existing: state.contents.map(String),
       existingEmbeddings: state.embeddings,
       candidate: content.join("\n"),
-      threshold: options.dedupeThreshold ?? 0.5
+      threshold: options.dedupeThreshold ?? DEFAULT_DEDUPE_THRESHOLD
     }).catch((error) => {
       log("Error during deduplication check", { error });
       return { should: false };
@@ -104,7 +105,7 @@ export async function ensureUnique<TContent = string>({
       prompt: articleSectionPromptTemplate.format({
         topic: state.topic,
         outlineItem: JSON.stringify(state.currentOutlineItem),
-        lastK: JSON.stringify(state.sections.slice(-3)),
+        lastK: JSON.stringify(state.sections.slice(-k)),
       }),
     }).catch((error) => {
       log("Error during content regeneration", { error, attempt });

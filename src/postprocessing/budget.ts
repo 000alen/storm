@@ -3,6 +3,7 @@ import { type GenerationState, type PostprocessResult, type StormOptions } from 
 import { estimateTokenCount } from "@/utils";
 import { log } from "@/logging";
 import { OpenAI } from "openai";
+import { DEFAULT_TOKEN_TOLERANCE } from "@/config";
 
 const openai = new OpenAI();
 
@@ -91,7 +92,8 @@ export async function ensureBudget<TContent = string>({
   tokenBudget?: number;
   skipAdjustment?: boolean;
 }): Promise<PostprocessResult<TContent>> {
-  // If no token budget, just return content as is
+  const tokenTolerance = options.tokenTolerance ?? DEFAULT_TOKEN_TOLERANCE;
+
   if (!tokenBudget) {
     return {
       state,
@@ -122,7 +124,7 @@ export async function ensureBudget<TContent = string>({
   }
 
   // If within 10% of budget, consider it good enough
-  const tolerance = tokenBudget * 0.1;
+  const tolerance = tokenBudget * tokenTolerance;
   if (currentTokens >= tokenBudget - tolerance && currentTokens <= tokenBudget + tolerance) {
     log("Content is within budget tolerance", {
       tokens: currentTokens,
