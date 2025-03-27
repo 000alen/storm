@@ -22,6 +22,7 @@ export async function ensureUnique<TContent = string>({
   state: GenerationState<TContent>;
   content: TContent[];
 }): Promise<PostprocessResult<TContent>> {
+  const contentSchema = options.contentSchema ?? textContentSchema;
   const k = options.k ?? DEFAULT_K;
   const maxAttempts = DEFAULT_MAX_ATTEMPTS;
 
@@ -100,7 +101,7 @@ export async function ensureUnique<TContent = string>({
       schema: z.object({
         title: z.string(),
         description: z.string(),
-        content: textContentSchema.array(),
+        content: contentSchema.array(),
       }),
       prompt: articleSectionPromptTemplate.format({
         topic: state.topic,

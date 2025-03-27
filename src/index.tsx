@@ -15,7 +15,7 @@ import outlineSchema from "@/outlineSchema.json";
 import { nativeGenerateObject } from "@/utils";
 import { ensureBudget } from "@/postprocessing/budget";
 import { ensureUnique } from "@/postprocessing/unique";
-import { DEFAULT_K, DEFAULT_MAX_STEPS, DEFAULT_TOKEN_BUDGET, DEFAULT_USE_RESEARCH_TOOLS } from "@/config";
+import { DEFAULT_K, DEFAULT_MAX_STEPS, DEFAULT_PERSPECTIVES_N, DEFAULT_QUESTIONS_N, DEFAULT_TOKEN_BUDGET, DEFAULT_USE_RESEARCH_TOOLS } from "@/config";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
@@ -33,6 +33,7 @@ export async function generateArticleSection(
   generatedEmbeddings: any[] = []
 ): Promise<{ articleSection: ArticleSection, state: GenerationState }> {
   const k = options.k ?? DEFAULT_K;
+  const contentSchema = options.contentSchema ?? textContentSchema;
 
   log("Generating article section", { title: outlineItem.title });
 
@@ -42,7 +43,7 @@ export async function generateArticleSection(
     schema: z.object({
       title: z.string(),
       description: z.string(),
-      content: textContentSchema.array(),
+      content: contentSchema.array(),
     }),
     prompt: articleSectionPromptTemplate.format({
       topic: options.topic,
@@ -213,7 +214,7 @@ export async function generateArticle(
 }
 
 export async function storm(options: StormOptions) {
-  let { model, topic, outline, useResearchTools = DEFAULT_USE_RESEARCH_TOOLS } = options;
+  let { model, topic, outline, useResearchTools = DEFAULT_USE_RESEARCH_TOOLS, perspectives: nPerspectives = DEFAULT_PERSPECTIVES_N, questions: nQuestions = DEFAULT_QUESTIONS_N } = options;
 
   log("Starting storm process", { topic });
 
@@ -240,7 +241,7 @@ export async function storm(options: StormOptions) {
     schema: z.object({
       perspectives: perspectiveSchema.array(),
     }),
-    prompt: perspectivesPromptTemplate.format({ topic }),
+    prompt: perspectivesPromptTemplate.format({ topic, n: nPerspectives }),
   })
     .catch((error) => {
       log("Error generating perspectives", { error });
@@ -261,7 +262,7 @@ export async function storm(options: StormOptions) {
           schema: z.object({
             questions: questionSchema.array(),
           }),
-          prompt: questionsPromptTemplate.format({ topic, perspective: JSON.stringify(perspective) }),
+          prompt: questionsPromptTemplate.format({ topic, perspective: JSON.stringify(perspective), n: nQuestions }),
         })
           .catch((error) => {
             log("Error generating questions for perspective", { perspective: perspective.title, error });

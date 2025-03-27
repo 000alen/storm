@@ -3,6 +3,8 @@ import { z } from "zod";
 
 export const textContentSchema = z.string().describe("Represents a bloc of content (could be thought of as a paragraph)");
 
+export type TextContent = z.infer<typeof textContentSchema>;
+
 export const baseOutlineItemSchema = z
   .object({
     title: z.string().describe("The title of the article section"),
@@ -80,7 +82,13 @@ export const articleSectionSchema: z.ZodType<ArticleSection> = z
   })
   .describe("An article section");
 
-export const articleSchema = z
+export interface Article<TContent = string> {
+  title: string;
+  description: string;
+  sections: ArticleSection<TContent>[];
+}
+
+export const articleSchema: z.ZodType<Article> = z
   .object({
     title: z.string().describe("The title of the article"),
     description: z.string().describe("The description of the article"),
@@ -88,10 +96,7 @@ export const articleSchema = z
   })
   .describe("The article");
 
-export type Article = z.infer<typeof articleSchema>;
-
-
-export interface StormOptions {
+export interface StormOptions<TContent = string> {
   model: LanguageModel;
   embeddingModel: EmbeddingModel<string>;
 
@@ -104,9 +109,14 @@ export interface StormOptions {
   maxSteps?: number;
   tokenTolerance?: number;
 
+  perspectives?: number;
+  questions?: number;
+
   // tools?: ToolSet;
 
   useResearchTools?: boolean;
+
+  contentSchema?: z.ZodType<TContent>;
 }
 
 export type GenerationState<TContent = string> = {

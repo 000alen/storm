@@ -7,11 +7,13 @@ const outlineSchema = z.object({
 
 const perspectivesSchema = z.object({
   topic: z.string(),
+  n: z.number().int().positive(),
 });
 
 const questionsSchema = z.object({
   topic: z.string(),
   perspective: z.string(),
+  n: z.number().int().positive(),
 });
 
 const answersSchema = z.object({
@@ -68,7 +70,7 @@ For each perspective, provide:
 2. A brief description explaining this perspective's relevance to the topic
 3. Guidelines on what aspects to explore from this perspective
 
-Include 3-5 distinct perspectives that will add depth and breadth to the article.
+Include ${params => params.n.toString()} distinct perspectives that will add depth and breadth to the article.
 Focus on perspectives that might challenge the reader or offer unique insights.
 Avoid overly similar perspectives or those with limited relevance to the main topic.
 `;
@@ -78,7 +80,7 @@ Based on the following perspective regarding ${params => params.topic}:
 
 ${params => params.perspective}
 
-Generate 3-5 thought-provoking questions that will help explore this perspective deeply.
+Generate ${params => params.n.toString()} thought-provoking questions that will help explore this perspective deeply.
 
 For each question:
 1. Make it specific rather than general
