@@ -2,10 +2,8 @@ import { type LanguageModel } from "ai";
 import { type GenerationState, type PostprocessResult, type StormOptions } from "@/types";
 import { estimateTokenCount } from "@/utils";
 import { log } from "@/logging";
-import { OpenAI } from "openai";
+import { generateText } from "ai";
 import { DEFAULT_TOKEN_TOLERANCE } from "@/config";
-
-const openai = new OpenAI();
 
 /**
  * Expands content to meet the token budget
@@ -15,29 +13,21 @@ async function expandContent(
   content: string,
   targetTokenCount: number
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: model.modelId,
-    messages: [
-      {
-        role: "system",
-        content: "You are an expert content expander. You will be given content that needs to be expanded to meet a token budget. Maintain the original tone and style while adding relevant details, examples, or elaborations."
-      },
-      {
-        role: "user",
-        content: `Expand the following content to approximately ${targetTokenCount} tokens while maintaining quality and relevance. Current content has approximately ${estimateTokenCount(content)} tokens.
+  const { text } = await generateText({
+    model,
+    prompt: `Expand the following content to approximately ${targetTokenCount} tokens while maintaining quality and relevance. Current content has approximately ${estimateTokenCount(content)} tokens.
 
 Content:
 ${content}
 
-Provide the expanded content as your response, with each paragraph on a separate line.`
-      }
-    ]
+Provide the expanded content as your response, with each paragraph on a separate line.`,
+    system: "You are an expert content expander. You will be given content that needs to be expanded to meet a token budget. Maintain the original tone and style while adding relevant details, examples, or elaborations."
   }).catch(error => {
     log("Error expanding content", { error });
     throw error;
   });
 
-  return response.choices[0]?.message.content?.trim() || content;
+  return text.trim() || content;
 }
 
 /**
@@ -48,29 +38,21 @@ async function truncateContent(
   content: string,
   targetTokenCount: number
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: model.modelId,
-    messages: [
-      {
-        role: "system",
-        content: "You are an expert content editor. You will be given content that needs to be condensed to meet a token budget. Preserve the most important information while making the content more concise."
-      },
-      {
-        role: "user",
-        content: `Condense the following content to approximately ${targetTokenCount} tokens while preserving the key information. Current content has approximately ${estimateTokenCount(content)} tokens.
+  const { text } = await generateText({
+    model,
+    prompt: `Condense the following content to approximately ${targetTokenCount} tokens while preserving the key information. Current content has approximately ${estimateTokenCount(content)} tokens.
 
 Content:
 ${content}
 
-Provide the condensed content as your response, with each paragraph on a separate line.`
-      }
-    ]
+Provide the condensed content as your response, with each paragraph on a separate line.`,
+    system: "You are an expert content editor. You will be given content that needs to be condensed to meet a token budget. Preserve the most important information while making the content more concise."
   }).catch(error => {
     log("Error truncating content", { error });
     throw error;
   });
 
-  return response.choices[0]?.message.content?.trim() || content;
+  return text.trim() || content;
 }
 
 /**
