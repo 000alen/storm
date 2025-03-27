@@ -1,3 +1,4 @@
+import type { EmbeddingModel, LanguageModel } from "ai";
 import { z } from "zod";
 
 export const textContentSchema = z.string().describe("Represents a bloc of content (could be thought of as a paragraph)");
@@ -58,12 +59,11 @@ export const answerSchema = z
 
 export type Answer = z.infer<typeof answerSchema>;
 
-export type ArticleSection = {
+export type ArticleSection<TContent = string> = {
   title: string;
   description: string;
-  // content: string;
-  content: string[];
-  children: ArticleSection[];
+  content: TContent[];
+  children: ArticleSection<TContent>[];
   tokenBudget: number;
   actualTokenCount: number;
 }
@@ -89,3 +89,43 @@ export const articleSchema = z
   .describe("The article");
 
 export type Article = z.infer<typeof articleSchema>;
+
+
+export interface StormOptions {
+  model: LanguageModel;
+  embeddingModel: EmbeddingModel<string>;
+
+  topic: string;
+  outline?: Outline;
+
+  dedupeThreshold?: number;
+  // tools?: ToolSet;
+
+  useResearchTools?: boolean;
+}
+
+export type GenerationState<TContent = string> = {
+  topic: string;
+  currentOutlineItem: OutlineItem;
+  lastKSections: ArticleSection<TContent>[];
+
+  contents: TContent[];
+  embeddings: any[];
+}
+
+/**
+ * Type representing the result of a postprocessing step
+ */
+export interface PostprocessResult<TContent = string> {
+  state: GenerationState<TContent>;
+  content: TContent[];
+}
+
+/**
+ * Type representing a postprocessing step function
+ */
+export type Postprocess<TContent = string> = (params: {
+  options: StormOptions;
+  state: GenerationState<TContent>;
+  content: TContent[];
+}) => Promise<PostprocessResult<TContent>>;

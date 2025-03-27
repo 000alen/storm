@@ -1,7 +1,7 @@
-import { generateObject, generateText, Output, type LanguageModel, type ToolSet } from "ai";
+import { generateObject, generateText, Output, type ToolSet } from "ai";
 import { z } from "zod";
 import { log } from "@/logging";
-import { answerSchema, perspectiveSchema, questionSchema, textContentSchema, type Answer, type ArticleSection, type Outline, type OutlineItem } from "@/types";
+import { answerSchema, perspectiveSchema, questionSchema, textContentSchema, type Answer, type ArticleSection, type GenerationState, type Outline, type OutlineItem, type Postprocess, type StormOptions } from "@/types";
 import {
   outlinePromptTemplate,
   perspectivesPromptTemplate,
@@ -9,29 +9,20 @@ import {
   answersPromptTemplate,
   finalOutlinePromptTemplate,
   articleSectionPromptTemplate
-} from "./prompt";
-import { createBrowserToolSet } from "./tools";
-import { type EmbeddingModel, embed } from "ai";
-import outlineSchema from "./outlineSchema.json";
-import { nativeGenerateObject, adjustContentToTokenBudget, countSectionTokens } from "./utils";
-import { shouldDedupe } from "./dedupe";
+} from "@/prompt";
+import { createBrowserToolSet } from "@/tools";
+import outlineSchema from "@/outlineSchema.json";
+import { nativeGenerateObject } from "@/utils";
+import { ensureBudget } from "@/postprocessing/budget";
+import { ensureUnique } from "@/postprocessing/unique";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
 
-export interface StormOptions {
-  model: LanguageModel;
-  embeddingModel: EmbeddingModel<string>;
-
-  topic: string;
-  outline?: Outline;
-
-  dedupeThreshold?: number;
-  // tools?: ToolSet;
-
-
-  useResearchTools?: boolean;
-}
+const postprocessing: Postprocess[] = [
+  ensureUnique,
+  ensureBudget,
+];
 
 export async function generateArticleSection(
   options: StormOptions,
@@ -40,103 +31,53 @@ export async function generateArticleSection(
   generatedSections: string[] = [],
   generatedEmbeddings: any[] = []
 ): Promise<ArticleSection> {
-  const { model, topic, embeddingModel, dedupeThreshold = 0.85 } = options;
+  const { model, topic } = options;
 
   log("Generating article section", { title: outlineItem.title });
 
-  let articleSection;
-  let maxAttempts = 3;
-  let attempts = 0;
-  let shouldRegenerate = false;
-
-  do {
-    attempts++;
-    if (attempts > 1) {
-      log(`Regenerating section (attempt ${attempts}) due to similarity`, { title: outlineItem.title });
-    }
-
-    const { object: generatedSection } = await generateObject({
-      model,
-      schema: z.object({
-        title: z.string(),
-        description: z.string(),
-        content: textContentSchema.array(),
-      }),
-      prompt: articleSectionPromptTemplate.format({
-        topic,
-        outlineItem: JSON.stringify(outlineItem),
-        lastK: JSON.stringify(lastK),
-      }),
+  // Generate the initial section content
+  const { object: generatedSection } = await generateObject({
+    model,
+    schema: z.object({
+      title: z.string(),
+      description: z.string(),
+      content: textContentSchema.array(),
+    }),
+    prompt: articleSectionPromptTemplate.format({
+      topic,
+      outlineItem: JSON.stringify(outlineItem),
+      lastK: JSON.stringify(lastK),
+    }),
+  })
+    .catch((error) => {
+      log("Error generating article section", { title: outlineItem.title, error });
+      throw error;
     });
 
-    articleSection = {
-      ...generatedSection,
-      tokenBudget: outlineItem.tokenBudget,
-      children: [],
-      actualTokenCount: -1
-    };
+  let articleSection: ArticleSection = {
+    ...generatedSection,
+    tokenBudget: outlineItem.tokenBudget,
+    children: [],
+    actualTokenCount: -1
+  };
 
-    // Convert section content to string for deduplication check
-    const sectionText = articleSection.content.map(item =>
-      typeof item === 'string' ? item : JSON.stringify(item)
-    ).join('\n');
+  let state: GenerationState = {
+    topic,
+    currentOutlineItem: outlineItem,
+    lastKSections: lastK,
+    contents: [],
+    embeddings: [],
+  };
 
-    if (generatedSections.length > 0 && embeddingModel) {
-      // Check if this section is too similar to previously generated sections
-      const { should } = await shouldDedupe({
-        model: embeddingModel,
-        existing: generatedSections,
-        existingEmbeddings: generatedEmbeddings,
-        candidate: sectionText,
-        threshold: dedupeThreshold
-      });
+  // Apply postprocessing steps in sequence
+  for (const step of postprocessing) {
+    const result = await step({ options, state, content: articleSection.content });
 
-      shouldRegenerate = should && attempts < maxAttempts;
-
-      if (should) {
-        log("Section content is too similar to existing content", {
-          title: outlineItem.title,
-          attempt: attempts,
-          willRegenerate: shouldRegenerate
-        });
-      }
-    }
-
-    if (!shouldRegenerate) {
-      // Add this section's content to the list of generated sections
-      generatedSections.push(sectionText);
-
-      // Get embedding for this section if we have an embedding model
-      if (embeddingModel) {
-        const { embedding } = await embed({
-          model: embeddingModel,
-          value: sectionText
-        });
-        generatedEmbeddings.push(embedding);
-      }
-    }
-  } while (shouldRegenerate);
-
-  log("Article section generated", { title: articleSection.title, attempts });
-
-  // Calculate and adjust token count if a budget is specified
-  if (articleSection.tokenBudget) {
-    log("Adjusting section content to meet token budget", {
-      title: articleSection.title,
-      budget: articleSection.tokenBudget
-    });
-
-    articleSection = await adjustContentToTokenBudget(model, articleSection);
-
-    log("Section adjusted to meet token budget", {
-      title: articleSection.title,
-      tokens: articleSection.actualTokenCount,
-      budget: articleSection.tokenBudget
-    });
-  } else {
-    // Still calculate the token count for reporting
-    articleSection.actualTokenCount = countSectionTokens(articleSection);
+    state = result.state;
+    articleSection.content = result.content;
   }
+
+  log("Article section generated", { title: articleSection.title });
 
   let children: ArticleSection[] = [];
 
@@ -274,7 +215,11 @@ export async function storm(options: StormOptions) {
             questions: questionSchema.array(),
           }),
           prompt: questionsPromptTemplate.format({ topic, perspective: JSON.stringify(perspective) }),
-        });
+        })
+          .catch((error) => {
+            log("Error generating questions for perspective", { perspective: perspective.title, error });
+            throw error;
+          });
 
         log("Questions generated for perspective", { perspective: perspective.title, questionCount: questions.length });
 
