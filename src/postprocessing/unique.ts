@@ -104,7 +104,7 @@ export async function ensureUnique<TContent = string>({
       prompt: articleSectionPromptTemplate.format({
         topic: state.topic,
         outlineItem: JSON.stringify(state.currentOutlineItem),
-        lastK: JSON.stringify(state.lastKSections),
+        lastK: JSON.stringify(state.sections.slice(-3)),
       }),
     }).catch((error) => {
       log("Error during content regeneration", { error, attempt });

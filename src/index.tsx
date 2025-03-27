@@ -26,12 +26,16 @@ const postprocessing: Postprocess[] = [
 
 export async function generateArticleSection(
   options: StormOptions,
+  state: GenerationState,
   outlineItem: OutlineItem,
-  lastK: ArticleSection[],
   generatedSections: string[] = [],
   generatedEmbeddings: any[] = []
-): Promise<ArticleSection> {
+): Promise<{ articleSection: ArticleSection, state: GenerationState }> {
   const { model, topic } = options;
+  const k = 3; // Define k here for use in getting lastK
+
+  // Get lastK from state instead of it being passed in
+  const lastK = state.sections.slice(-k);
 
   log("Generating article section", { title: outlineItem.title });
 
@@ -61,12 +65,10 @@ export async function generateArticleSection(
     actualTokenCount: -1
   };
 
-  let state: GenerationState = {
-    topic,
+  // Update state with current outline item and lastK sections
+  state = {
+    ...state,
     currentOutlineItem: outlineItem,
-    lastKSections: lastK,
-    contents: [],
-    embeddings: [],
   };
 
   // Apply postprocessing steps in sequence
@@ -87,6 +89,12 @@ export async function generateArticleSection(
     // Create a temporary version of the current section with empty children
     const currentSectionWithoutChildren = { ...articleSection, children: [] };
 
+    // Add this temporary section to state for subsections to access
+    const subsectionState: GenerationState = {
+      ...state,
+      sections: [...state.sections, currentSectionWithoutChildren]
+    };
+
     // Process each subsection with true lastK that includes all previous subsections
     for (let i = 0; i < outlineItem.items.length; i++) {
       const subItem = outlineItem.items[i];
@@ -94,23 +102,30 @@ export async function generateArticleSection(
       // Skip any undefined items
       if (!subItem) continue;
 
-      // For each subsection, include:
-      // 1. The original lastK
-      // 2. The parent section without children
-      // 3. All previously generated subsections at this level
-      const subsectionLastK = [
-        ...lastK,
-        currentSectionWithoutChildren,
-        ...children
-      ];
+      // Create state for this subsection - include previously generated children
+      const currentSubsectionState: GenerationState = {
+        ...subsectionState,
+        sections: [
+          ...subsectionState.sections,
+          ...children
+        ]
+      };
 
-      const subsection = await generateArticleSection(
+      const { articleSection: subsection, state: updatedState } = await generateArticleSection(
         options,
+        currentSubsectionState,
         subItem,
-        subsectionLastK,
         generatedSections,
         generatedEmbeddings
       );
+
+      // Update the state with the one returned from the subsection generation
+      state = {
+        ...updatedState,
+        // Preserve the correct allGeneratedSections for this level
+        sections: state.sections
+      };
+
       children.push(subsection);
     }
 
@@ -120,10 +135,22 @@ export async function generateArticleSection(
     });
   }
 
-  return {
+  // Create the final articleSection with children
+  const finalArticleSection = {
     ...articleSection,
     children,
-  }
+  };
+
+  // Add the complete section to allGeneratedSections
+  state = {
+    ...state,
+    sections: [...state.sections, finalArticleSection]
+  };
+
+  return {
+    articleSection: finalArticleSection,
+    state
+  };
 }
 
 export async function generateArticle(
@@ -132,13 +159,36 @@ export async function generateArticle(
 ) {
   log("Starting article generation based on outline", { title: outline.title });
 
-  const k = 1;
+  // Initialize generation state with a placeholder outline item
+  const initialOutlineItem: OutlineItem = {
+    title: outline.title,
+    description: outline.description,
+    guidelines: "",
+    tokenBudget: 0,
+    items: []
+  };
+
+  let state: GenerationState = {
+    topic: options.topic,
+    currentOutlineItem: initialOutlineItem,
+    sections: [],
+    contents: [],
+    embeddings: [],
+  };
 
   const articleSections: ArticleSection[] = [];
   for (const item of outline.items) {
-    const lastK = articleSections.slice(-k);
     log(`Generating main section and any subsections for "${item.title}"`);
-    const articleSection = await generateArticleSection(options, item, lastK);
+
+    const { articleSection, state: updatedState } = await generateArticleSection(
+      options,
+      state,
+      item,
+    );
+
+    // Update the state with the one returned from the section generation
+    state = updatedState;
+
     articleSections.push(articleSection);
 
     // Log information about the generated section and its subsections

@@ -107,8 +107,8 @@ export interface StormOptions {
 export type GenerationState<TContent = string> = {
   topic: string;
   currentOutlineItem: OutlineItem;
-  lastKSections: ArticleSection<TContent>[];
-
+  // lastKSections: ArticleSection<TContent>[];
+  sections: ArticleSection<TContent>[];
   contents: TContent[];
   embeddings: any[];
 }
