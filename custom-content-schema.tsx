@@ -17,7 +17,12 @@ const contentSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("text").describe("Use this type to include text in the content"),
-    text: z.string().describe("The text content"),
+    text: z.string().describe("The text content (paragraph)"),
+  }),
+  z.object({
+    type: z.literal("insight").describe("Use this type to highlight important insights"),
+    title: z.string().describe("The title of the insight"),
+    content: z.string().describe("The insight content"),
   })
 ])
 
@@ -65,6 +70,24 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     color: '#666',
+  },
+  insightContainer: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 15,
+    marginVertical: 15,
+    borderLeft: '4 solid #3498db',
+  },
+  insightTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#3498db',
+  },
+  insightContent: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 1.5,
   }
 });
 
@@ -80,18 +103,29 @@ const ArticleComponent = ({ article }: { article: CustomArticle }) => {
           <Text style={styles.sectionTitle}>{section.title}</Text>
 
           <View>
-            {section.content.map((content, contentIndex) => (
-              content.type === "image" ? (
-                <View key={`image-${contentIndex}`} style={styles.imageContainer}>
-                  <View style={styles.imagePlaceholder} />
-                  <Text style={styles.imageCaption}>{content.caption}</Text>
-                </View>
-              ) : (
-                <Text key={`text-${contentIndex}`} style={styles.text}>
-                  {content.text}
-                </Text>
-              )
-            ))}
+            {section.content.map((content, contentIndex) => {
+              if (content.type === "image") {
+                return (
+                  <View key={`image-${contentIndex}`} style={styles.imageContainer}>
+                    <View style={styles.imagePlaceholder} />
+                    <Text style={styles.imageCaption}>{content.caption}</Text>
+                  </View>
+                );
+              } else if (content.type === "insight") {
+                return (
+                  <View key={`insight-${contentIndex}`} style={styles.insightContainer}>
+                    <Text style={styles.insightTitle}>{content.title}</Text>
+                    <Text style={styles.insightContent}>{content.content}</Text>
+                  </View>
+                );
+              } else {
+                return (
+                  <Text key={`text-${contentIndex}`} style={styles.text}>
+                    {content.text}
+                  </Text>
+                );
+              }
+            })}
           </View>
         </Page>
       ))}
@@ -107,7 +141,7 @@ async function main() {
   const result = await storm({
     model,
     embeddingModel,
-    topic: "Generate a proof of concept (only 1 section) article about a to do list app. Include images (type=\"image\") in the content of the app.",
+    topic: "Generate a brief introduction to Real Analysis. Make it accessible to high school students. Include images (type=\"image\") and insights (type=\"insight\") in the content.",
     useResearchTools: false,
     perspectives: 1,
     questions: 1,
