@@ -1,7 +1,7 @@
-import { generateObject, generateText, Output, type LanguageModel, type ToolSet } from "ai";
+import { generateObject, generateText, Output, type ToolSet } from "ai";
 import { z } from "zod";
 import { log } from "@/logging";
-import { answerSchema, perspectiveSchema, questionSchema, textContentSchema, type Answer, type ArticleSection, type Outline, type OutlineItem } from "@/types";
+import { answerSchema, perspectiveSchema, questionSchema, textContentSchema, type Answer, type ArticleSection, type GenerationState, type Outline, type OutlineItem, type Postprocess, type StormOptions } from "@/types";
 import {
   outlinePromptTemplate,
   perspectivesPromptTemplate,
@@ -9,134 +9,75 @@ import {
   answersPromptTemplate,
   finalOutlinePromptTemplate,
   articleSectionPromptTemplate
-} from "./prompt";
-import { createBrowserToolSet } from "./tools";
-import { type EmbeddingModel, embed } from "ai";
-import outlineSchema from "./outlineSchema.json";
-import { nativeGenerateObject, adjustContentToTokenBudget, countSectionTokens } from "./utils";
-import { shouldDedupe } from "./dedupe";
+} from "@/prompt";
+import { createBrowserToolSet } from "@/tools";
+import outlineSchema from "@/outlineSchema.json";
+import { nativeGenerateObject } from "@/utils";
+import { ensureBudget } from "@/postprocessing/budget";
+import { ensureUnique } from "@/postprocessing/unique";
+import { DEFAULT_K, DEFAULT_MAX_STEPS, DEFAULT_PERSPECTIVES_N, DEFAULT_QUESTIONS_N, DEFAULT_TOKEN_BUDGET, DEFAULT_USE_RESEARCH_TOOLS } from "@/config";
 
 export { getStream } from "@/components/article";
 export { default as Article } from "@/components/article";
 
-export interface StormOptions {
-  model: LanguageModel;
-  embeddingModel: EmbeddingModel<string>;
-
-  topic: string;
-  outline?: Outline;
-
-  dedupeThreshold?: number;
-  // tools?: ToolSet;
-
-
-  useResearchTools?: boolean;
-}
+const postprocessing: Postprocess[] = [
+  ensureUnique,
+  ensureBudget,
+];
 
 export async function generateArticleSection(
   options: StormOptions,
+  state: GenerationState,
   outlineItem: OutlineItem,
-  lastK: ArticleSection[],
   generatedSections: string[] = [],
   generatedEmbeddings: any[] = []
-): Promise<ArticleSection> {
-  const { model, topic, embeddingModel, dedupeThreshold = 0.85 } = options;
+): Promise<{ articleSection: ArticleSection, state: GenerationState }> {
+  const k = options.k ?? DEFAULT_K;
+  const contentSchema = options.contentSchema ?? textContentSchema;
 
   log("Generating article section", { title: outlineItem.title });
 
-  let articleSection;
-  let maxAttempts = 3;
-  let attempts = 0;
-  let shouldRegenerate = false;
-
-  do {
-    attempts++;
-    if (attempts > 1) {
-      log(`Regenerating section (attempt ${attempts}) due to similarity`, { title: outlineItem.title });
-    }
-
-    const { object: generatedSection } = await generateObject({
-      model,
-      schema: z.object({
-        title: z.string(),
-        description: z.string(),
-        content: textContentSchema.array(),
-      }),
-      prompt: articleSectionPromptTemplate.format({
-        topic,
-        outlineItem: JSON.stringify(outlineItem),
-        lastK: JSON.stringify(lastK),
-      }),
+  // Generate the initial section content
+  const { object: generatedSection } = await generateObject({
+    model: options.model,
+    schema: z.object({
+      title: z.string(),
+      description: z.string(),
+      content: contentSchema.array(),
+    }),
+    prompt: articleSectionPromptTemplate.format({
+      topic: options.topic,
+      outlineItem: JSON.stringify(outlineItem),
+      lastK: JSON.stringify(state.sections.slice(-k)),
+    }),
+  })
+    .catch((error) => {
+      log("Error generating article section", { title: outlineItem.title, error });
+      throw error;
     });
 
-    articleSection = {
-      ...generatedSection,
-      tokenBudget: outlineItem.tokenBudget,
-      children: [],
-      actualTokenCount: -1
-    };
+  let articleSection: ArticleSection = {
+    ...generatedSection,
+    tokenBudget: outlineItem.tokenBudget,
+    children: [],
+    actualTokenCount: -1
+  };
 
-    // Convert section content to string for deduplication check
-    const sectionText = articleSection.content.map(item =>
-      typeof item === 'string' ? item : JSON.stringify(item)
-    ).join('\n');
+  // Update state with current outline item and lastK sections
+  state = {
+    ...state,
+    currentOutlineItem: outlineItem,
+  };
 
-    if (generatedSections.length > 0 && embeddingModel) {
-      // Check if this section is too similar to previously generated sections
-      const { should } = await shouldDedupe({
-        model: embeddingModel,
-        existing: generatedSections,
-        existingEmbeddings: generatedEmbeddings,
-        candidate: sectionText,
-        threshold: dedupeThreshold
-      });
+  // Apply postprocessing steps in sequence
+  for (const step of postprocessing) {
+    const result = await step({ options, state, content: articleSection.content });
 
-      shouldRegenerate = should && attempts < maxAttempts;
-
-      if (should) {
-        log("Section content is too similar to existing content", {
-          title: outlineItem.title,
-          attempt: attempts,
-          willRegenerate: shouldRegenerate
-        });
-      }
-    }
-
-    if (!shouldRegenerate) {
-      // Add this section's content to the list of generated sections
-      generatedSections.push(sectionText);
-
-      // Get embedding for this section if we have an embedding model
-      if (embeddingModel) {
-        const { embedding } = await embed({
-          model: embeddingModel,
-          value: sectionText
-        });
-        generatedEmbeddings.push(embedding);
-      }
-    }
-  } while (shouldRegenerate);
-
-  log("Article section generated", { title: articleSection.title, attempts });
-
-  // Calculate and adjust token count if a budget is specified
-  if (articleSection.tokenBudget) {
-    log("Adjusting section content to meet token budget", {
-      title: articleSection.title,
-      budget: articleSection.tokenBudget
-    });
-
-    articleSection = await adjustContentToTokenBudget(model, articleSection);
-
-    log("Section adjusted to meet token budget", {
-      title: articleSection.title,
-      tokens: articleSection.actualTokenCount,
-      budget: articleSection.tokenBudget
-    });
-  } else {
-    // Still calculate the token count for reporting
-    articleSection.actualTokenCount = countSectionTokens(articleSection);
+    state = result.state;
+    articleSection.content = result.content;
   }
+
+  log("Article section generated", { title: articleSection.title });
 
   let children: ArticleSection[] = [];
 
@@ -146,6 +87,12 @@ export async function generateArticleSection(
     // Create a temporary version of the current section with empty children
     const currentSectionWithoutChildren = { ...articleSection, children: [] };
 
+    // Add this temporary section to state for subsections to access
+    const subsectionState: GenerationState = {
+      ...state,
+      sections: [...state.sections, currentSectionWithoutChildren]
+    };
+
     // Process each subsection with true lastK that includes all previous subsections
     for (let i = 0; i < outlineItem.items.length; i++) {
       const subItem = outlineItem.items[i];
@@ -153,23 +100,30 @@ export async function generateArticleSection(
       // Skip any undefined items
       if (!subItem) continue;
 
-      // For each subsection, include:
-      // 1. The original lastK
-      // 2. The parent section without children
-      // 3. All previously generated subsections at this level
-      const subsectionLastK = [
-        ...lastK,
-        currentSectionWithoutChildren,
-        ...children
-      ];
+      // Create state for this subsection - include previously generated children
+      const currentSubsectionState: GenerationState = {
+        ...subsectionState,
+        sections: [
+          ...subsectionState.sections,
+          ...children
+        ]
+      };
 
-      const subsection = await generateArticleSection(
+      const { articleSection: subsection, state: updatedState } = await generateArticleSection(
         options,
+        currentSubsectionState,
         subItem,
-        subsectionLastK,
         generatedSections,
         generatedEmbeddings
       );
+
+      // Update the state with the one returned from the subsection generation
+      state = {
+        ...updatedState,
+        // Preserve the correct allGeneratedSections for this level
+        sections: state.sections
+      };
+
       children.push(subsection);
     }
 
@@ -179,10 +133,22 @@ export async function generateArticleSection(
     });
   }
 
-  return {
+  // Create the final articleSection with children
+  const finalArticleSection = {
     ...articleSection,
     children,
-  }
+  };
+
+  // Add the complete section to allGeneratedSections
+  state = {
+    ...state,
+    sections: [...state.sections, finalArticleSection]
+  };
+
+  return {
+    articleSection: finalArticleSection,
+    state
+  };
 }
 
 export async function generateArticle(
@@ -191,13 +157,36 @@ export async function generateArticle(
 ) {
   log("Starting article generation based on outline", { title: outline.title });
 
-  const k = 1;
+  // Initialize generation state with a placeholder outline item
+  const initialOutlineItem: OutlineItem = {
+    title: outline.title,
+    description: outline.description,
+    guidelines: "",
+    tokenBudget: DEFAULT_TOKEN_BUDGET,
+    items: []
+  };
+
+  let state: GenerationState = {
+    topic: options.topic,
+    currentOutlineItem: initialOutlineItem,
+    sections: [],
+    contents: [],
+    embeddings: [],
+  };
 
   const articleSections: ArticleSection[] = [];
   for (const item of outline.items) {
-    const lastK = articleSections.slice(-k);
     log(`Generating main section and any subsections for "${item.title}"`);
-    const articleSection = await generateArticleSection(options, item, lastK);
+
+    const { articleSection, state: updatedState } = await generateArticleSection(
+      options,
+      state,
+      item,
+    );
+
+    // Update the state with the one returned from the section generation
+    state = updatedState;
+
     articleSections.push(articleSection);
 
     // Log information about the generated section and its subsections
@@ -225,7 +214,7 @@ export async function generateArticle(
 }
 
 export async function storm(options: StormOptions) {
-  let { model, topic, outline, useResearchTools = false } = options;
+  let { model, topic, outline, useResearchTools = DEFAULT_USE_RESEARCH_TOOLS, perspectives: nPerspectives = DEFAULT_PERSPECTIVES_N, questions: nQuestions = DEFAULT_QUESTIONS_N } = options;
 
   log("Starting storm process", { topic });
 
@@ -252,7 +241,7 @@ export async function storm(options: StormOptions) {
     schema: z.object({
       perspectives: perspectiveSchema.array(),
     }),
-    prompt: perspectivesPromptTemplate.format({ topic }),
+    prompt: perspectivesPromptTemplate.format({ topic, n: nPerspectives }),
   })
     .catch((error) => {
       log("Error generating perspectives", { error });
@@ -273,8 +262,12 @@ export async function storm(options: StormOptions) {
           schema: z.object({
             questions: questionSchema.array(),
           }),
-          prompt: questionsPromptTemplate.format({ topic, perspective: JSON.stringify(perspective) }),
-        });
+          prompt: questionsPromptTemplate.format({ topic, perspective: JSON.stringify(perspective), n: nQuestions }),
+        })
+          .catch((error) => {
+            log("Error generating questions for perspective", { perspective: perspective.title, error });
+            throw error;
+          });
 
         log("Questions generated for perspective", { perspective: perspective.title, questionCount: questions.length });
 
@@ -310,7 +303,7 @@ export async function storm(options: StormOptions) {
         }),
       }),
       prompt: answersPromptTemplate.format({ topic, questions: JSON.stringify(questions) }),
-      maxSteps: 10,
+      maxSteps: options.maxSteps ?? DEFAULT_MAX_STEPS,
     })
       .catch((error) => {
         log("Error generating answers", { error });

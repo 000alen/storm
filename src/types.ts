@@ -1,6 +1,9 @@
+import type { EmbeddingModel, LanguageModel } from "ai";
 import { z } from "zod";
 
 export const textContentSchema = z.string().describe("Represents a bloc of content (could be thought of as a paragraph)");
+
+export type TextContent = z.infer<typeof textContentSchema>;
 
 export const baseOutlineItemSchema = z
   .object({
@@ -58,12 +61,11 @@ export const answerSchema = z
 
 export type Answer = z.infer<typeof answerSchema>;
 
-export type ArticleSection = {
+export type ArticleSection<TContent = string> = {
   title: string;
   description: string;
-  // content: string;
-  content: string[];
-  children: ArticleSection[];
+  content: TContent[];
+  children: ArticleSection<TContent>[];
   tokenBudget: number;
   actualTokenCount: number;
 }
@@ -80,7 +82,13 @@ export const articleSectionSchema: z.ZodType<ArticleSection> = z
   })
   .describe("An article section");
 
-export const articleSchema = z
+export interface Article<TContent = string> {
+  title: string;
+  description: string;
+  sections: ArticleSection<TContent>[];
+}
+
+export const articleSchema: z.ZodType<Article> = z
   .object({
     title: z.string().describe("The title of the article"),
     description: z.string().describe("The description of the article"),
@@ -88,4 +96,51 @@ export const articleSchema = z
   })
   .describe("The article");
 
-export type Article = z.infer<typeof articleSchema>;
+export interface StormOptions<TContent = string> {
+  model: LanguageModel;
+  embeddingModel: EmbeddingModel<string>;
+
+  topic: string;
+  outline?: Outline;
+
+  k?: number;
+  dedupeThreshold?: number;
+  maxAttempts?: number;
+  maxSteps?: number;
+  tokenTolerance?: number;
+
+  perspectives?: number;
+  questions?: number;
+
+  // tools?: ToolSet;
+
+  useResearchTools?: boolean;
+
+  contentSchema?: z.ZodType<TContent>;
+}
+
+export type GenerationState<TContent = string> = {
+  topic: string;
+  currentOutlineItem: OutlineItem;
+  // lastKSections: ArticleSection<TContent>[];
+  sections: ArticleSection<TContent>[];
+  contents: TContent[];
+  embeddings: any[];
+}
+
+/**
+ * Type representing the result of a postprocessing step
+ */
+export interface PostprocessResult<TContent = string> {
+  state: GenerationState<TContent>;
+  content: TContent[];
+}
+
+/**
+ * Type representing a postprocessing step function
+ */
+export type Postprocess<TContent = string> = (params: {
+  options: StormOptions;
+  state: GenerationState<TContent>;
+  content: TContent[];
+}) => Promise<PostprocessResult<TContent>>;

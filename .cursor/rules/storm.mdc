@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- use pnpm
+- use zod, the Vercel AI SDK
+- write log statements on errors (use the `.catch` pattern)
+- whenever introducing a new feature that adds to the workflow, make sure to write tests

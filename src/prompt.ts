@@ -7,11 +7,13 @@ const outlineSchema = z.object({
 
 const perspectivesSchema = z.object({
   topic: z.string(),
+  n: z.number().int().positive(),
 });
 
 const questionsSchema = z.object({
   topic: z.string(),
   perspective: z.string(),
+  n: z.number().int().positive(),
 });
 
 const answersSchema = z.object({
@@ -30,7 +32,6 @@ const articleSectionSchema = z.object({
   outlineItem: z.string(),
   lastK: z.string(),
   similarContent: z.string().optional(),
-  regenerationGuidance: z.string().optional(),
 });
 
 export const outlinePromptTemplate = template(outlineSchema)`
@@ -51,8 +52,6 @@ For token budgets:
 - Assign a token budget to each section and subsection based on its importance and complexity
 - Main sections typically need 500-1000 tokens
 - Subsections typically need 200-500 tokens
-- The total article should aim for 2000-5000 tokens total
-- Distribute the token budget proportionally based on the importance of each section
 
 The outline should have a logical flow, starting with introductory concepts and progressing to more complex ones.
 Ensure the outline is comprehensive enough to create a complete article that provides real value to readers.
@@ -68,7 +67,7 @@ For each perspective, provide:
 2. A brief description explaining this perspective's relevance to the topic
 3. Guidelines on what aspects to explore from this perspective
 
-Include 3-5 distinct perspectives that will add depth and breadth to the article.
+Include ${params => params.n.toString()} distinct perspectives that will add depth and breadth to the article.
 Focus on perspectives that might challenge the reader or offer unique insights.
 Avoid overly similar perspectives or those with limited relevance to the main topic.
 `;
@@ -78,7 +77,7 @@ Based on the following perspective regarding ${params => params.topic}:
 
 ${params => params.perspective}
 
-Generate 3-5 thought-provoking questions that will help explore this perspective deeply.
+Generate ${params => params.n.toString()} thought-provoking questions that will help explore this perspective deeply.
 
 For each question:
 1. Make it specific rather than general
@@ -128,7 +127,6 @@ Using the initial outline as a foundation and the Q&A insights as enrichment:
 For token budgets:
 - Maintain the existing token budgets from the draft outline if they seem appropriate
 - Adjust token budgets as needed based on your refinements (increase budgets for expanded sections, decrease for condensed ones)
-- Ensure the total budget still allows for a comprehensive article (typically 2000-5000 tokens total)
 - Allocate budgets proportionally based on section importance and complexity
 
 The refined outline should be more nuanced and comprehensive than the initial draft,
@@ -138,7 +136,7 @@ while remaining cohesive and well-structured.
 export const articleSectionPromptTemplate = template(articleSectionSchema)`
 Based on the topic: ${params => params.topic}
 
-Generate a high-quality article section based on the following outline item:
+Your task is to continue writing the article, based on the following outline item:
 
 """
 ${params => params.outlineItem}
@@ -158,7 +156,7 @@ The following paragraphs were identified as semantically similar:
 ${params.similarContent}
 """
 
-${params.regenerationGuidance || 'Please generate more unique, in-depth content that avoids being too similar to these paragraphs.'}
+Please generate more unique, in-depth content that avoids being too similar to these paragraphs.
 ` : ''}
 
 Write this section to be:
@@ -166,10 +164,11 @@ Write this section to be:
 2. Well-structured with clear paragraphs and transitions
 3. Engaging and readable for the target audience
 4. Connected to the overall article theme
-
-The content should be original, accurate, and valuable to readers.
-If this section has children/subsections, it should serve as an introduction to those topics.
-Aim for a professional tone that matches the subject matter.
+5. The content should be original, accurate, and valuable to readers.
+6. If this section has children/subsections, it should serve as an introduction to those topics.
+7. Aim for a professional tone that matches the subject matter.
+8. The article should be warm and engaging, with a tone that is friendly and approachable. Don't repeat yourself, be natural. Continue from where the previous section left off.
+9. You may use markdown formatting, but don't use headings.
 
 ${params => {
   const outline = JSON.parse(params.outlineItem);
