@@ -17,12 +17,14 @@ export const openai = new OpenAI();
 export const nativeGenerateObject = async <T>(options: NativeGenerateObjectOptions): Promise<{ object: T }> => {
   const { model, schema, schemaName, prompt } = options;
 
+  let modelId = model.modelId;
   if (!model.provider.includes("openai")) {
-    throw new Error(`Model is not an OpenAI model: ${model.provider}`);
+    // throw new Error(`Model is not an OpenAI model: ${model.provider}`);
+    modelId = "gpt-4o";
   }
 
   const response = await openai.beta.chat.completions.parse({
-    model: model.modelId,
+    model: modelId,
     messages: [{ role: "user", content: prompt }],
     response_format: {
       type: "json_schema",
